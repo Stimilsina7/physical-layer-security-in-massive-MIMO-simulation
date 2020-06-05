@@ -1,26 +1,26 @@
 # Matlab code for simulation of fig. 3 in the paper
 
-
+% === symbols and notations are according to paper =====================
 clear;
 disp('Simulation for secrecy rate vs number of eavesdropper antenna');disp('');
-Num = input('input # samples for estimation(1000s):')*1000;
-%=======================================================================
-N = 0:2:50; % number of antennas at Eavesdropper
+Num = input('input # samples for estimation(1000s):')*1000; % number of iteration
+
 %====noise at receivers=================================================
 sigmaU=10^(-0/10); %10dBm noise at user nodes
 sigmaR=10^(-0/10); %10dBm noise at relay
 sigmaE=10^(-0/10); %10dBm noise at eavesdropper
 sigmaZ=1;          %noise power of AN sequence
-
+%=========== number of antennas BS, relay, users ; eavesdropper ========
 K=4;   % number of users
 Nr=22; % number of relay antenna
-M=1000; % number of BS antenna
+M= 500; % number of BS antenna
+N = 0:2:50; % number of antennas at Eves
 
-%===Pathlosses==========================================================
+%=========== Pathlosses =================================================
 df=100*ones(1,Nr); % distance from BS to relay
-dg=100*ones(1,K); %distance from relay to user node
+dg=100*ones(1,K); % distance from relay to user node
 
-d0 = 100; %reference distance
+d0 = 100; %reference distance from BS
 nu = 2.4;  % pathloss exponent
 
 zeta_F = (d0./df).^nu; 
@@ -32,8 +32,8 @@ Dg_mat = diag(zeta_G);
 Et=10*ones(1,length(N)); %Transmit power of BS
 Pt = Et./sqrt(M);         %Transmit power scaled
 
-Pr=10*ones(1,length(N)); % Transmit power of relay
-En = 10;                  % total transmit AN noise power at BS
+Pr=10*ones(1,length(N));  % Transmit power of relay
+En = 10;                  % Total transmit AN noise power at BS
 Pn = En/sqrt(M);
 
 Tc1=196; Tc2=196; %coherence interval for first and second time-slot
@@ -43,57 +43,62 @@ Er=1; Eu=1;       %transmit pilot power from relay and user nodes
 Pp1=Tp1*Er./sqrt(M);
 Pp2=Tp2*Eu;
 
+% ==== vectors storing for capacity and information leakage ============
 capacity_user=[]; 
 capacity_eve1=[]; 
 capacity_eve2=[]; 
 capacity_eve=[];
 
+
+% ===================================
 for p=1:length(N)     % loop for different number of antennas at eavesdropper
-    capacity_count_user=0; 
-    capacity_count_eve1=0; 
-    capacity_count_eve2=0;
+    capacity_count_user=0;     capacity_count_eve1=0;     capacity_count_eve2=0; % variable inititalization
     Ne=N(p);
-    dh=150*ones(1,Ne); % relay to eavesdropper
-    de=150*ones(1,Ne); % BS to eavesdropper
-    zeta_H = (d0./dh).^nu;
-    zeta_E = (d0./de).^nu;
-    Dh_mat = diag(zeta_H); %diagonal matrix 
-    De_mat = diag(zeta_E);  %diagonal matrix 
+    dh=150*ones(1,Ne); % Distance from relay to Eve
+    de=150*ones(1,Ne); % Distance form BS to Eve
+    zeta_H = (d0./dh).^nu; % pathloss from relay to Eve
+    zeta_E = (d0./de).^nu; % pathloss from BS to Eve
+    Dh_mat = diag(zeta_H); % diagonal matrix (creates pathloss matrix for each antenna in Eve ) 
+    De_mat = diag(zeta_E);  % diagonal matrix 
+    
     for Ni=1:Num    % iteration
         tilde_F = (randn(Nr,M) + 1i*randn(Nr,M))*sqrt(1/2); % small scale fading coefficients
-        F = sqrt(Df_mat)*tilde_F;                           % channel F
-        NF =(randn(Nr,M)+1i*randn(Nr,M))*sqrt(1/2);         % random noise
+        F = sqrt(Df_mat)*tilde_F;                           % channel model F from BS to relay
+        NF =(randn(Nr,M)+1i*randn(Nr,M))*sqrt(1/2);         % random noise at relay
        
         tilde_G = (randn(K,Nr) + 1i*randn(K,Nr))*sqrt(1/2); 
-        G = sqrt(Dg_mat)*tilde_G;                           
-        NG=(randn(K,Nr)+1i*randn(K,Nr))*sqrt(1/2);          
+        G = sqrt(Dg_mat)*tilde_G;                          % channel model G from relay to users 
+        NG=(randn(K,Nr)+1i*randn(K,Nr))*sqrt(1/2);         % random noise at users
         
         tilde_H = (randn(Ne,Nr)+1i*randn(Ne,Nr))*sqrt(1/2);
-        H = sqrt(Dh_mat)*tilde_H;
+        H = sqrt(Dh_mat)*tilde_H;                           % channel model H from relay to Eve
 
         tilde_E = (randn(Ne,M)+1i*randn(Ne,M))*sqrt(1/2);
-        E = sqrt(De_mat)*tilde_E;
-
+        E = sqrt(De_mat)*tilde_E;                            % channel model G from BS to Eve
+        % ======== Channel estimation using Bayesian MMSE estimation ===================
+       
         F_hat = sqrt(Pp1)*Df_mat*(inv(Pp1*Df_mat + eye(Nr)))*(sqrt(Pp1)*F + NF); % estimated downlink channel F
         G_hat = sqrt(Pp2)*Dg_mat*(inv(Pp2*Dg_mat + eye(K)))*(sqrt(Pp2)*G + NG);   %estimated downlink channel G
-
+        
+        % =========== Data precoder and AN precoder design ===========================
         U = eye(M) - (G_hat*F_hat)'*(inv(G_hat*F_hat*(G_hat*F_hat)'))*G_hat*F_hat;    % null-space based artificial noise
         V = U/sqrt(trace(U*U'));
 
-        W = (G_hat*F_hat)'*(inv(G_hat*F_hat*(G_hat*F_hat)')); % precoder at BS
-        alpha = 1/sqrt(trace(W*W'));
-        W1 = alpha*W;                   % normalized precoder
+        W = (G_hat*F_hat)'*(inv(G_hat*F_hat*(G_hat*F_hat)')); % combined precoder at BS
+        alpha = 1/sqrt(trace(W*W'));       % normalizing factor
+        W1 = alpha*W;                   % normalized combined data precoder
         
         relay_gain = sqrt(Pr(p)/(Pt(p)*trace(F*W1*(F*W1)')+ Pn*trace(F*V*(F*V)')*sigmaZ^2 + Nr));
-        kk=1;
+        
+        kk=1;  % considering first user node
         g = G(kk,:);
         summ = 0;
         for jj=1:K
             if(jj~=kk)
-                summ = summ+g*F*W1(:,jj)*(g*F*W1(:,jj))'; % intracell interference
+                summ = summ+g*F*W1(:,jj)*(g*F*W1(:,jj))'; % intracell interference from other users
             end
         end
-        %%%%%%%% User exact simulation%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % ======== User exact simulation =======================
        
         Ps = relay_gain^2*Pt(p)*g*F*W1(:,kk)*(g*F*W1(:,kk))';       % desired signal power
         P1 = relay_gain^2*Pt(p)*summ
@@ -104,31 +109,33 @@ for p=1:length(N)     % loop for different number of antennas at eavesdropper
         capacity_sim = 0.5*min(Tc1-Tp1,Tc2-Tp2)/(Tc1+Tc2)*log2(1+gamma_out);
         capacity_count = capacity_count+capacity_sim;
             
-        %%%%%%%%%%%%%%%% Eavesdropper %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        %================ Eavesdropper information leakage ===============================
         C1 = Pn*E*V*(E*V)' + eye(Ne);  % effective correlation matrix
         C2 = relay_gain^2*sigmaZ^2*Pn*H*F*V*(H*F*V)' + relay_gain^2*sigmaR^2(H*H') + sigmaE^2*eye(Ne); % effective correlation matrix
         
         gamma_out_eve1 = Pt(p)*W1(:,kk)'*E'*(inv(C1))*E*W1(:,kk);
-        capacity_count_eve1 = capacity_count_eve1 + log2(1 + gamma_out_eve1);
+        capacity_count_eve1 = capacity_count_eve1 + log2(1 + gamma_out_eve1); %  information leakage from BS to user
         
         gamma_out_eve2 =relay_gain^2* Pt(p)*W1(:,kk)'*F'*H'*(inv(C2))*H*F*W1(:,kk);
-        capacity_count_eve2 = capacity_count_eve2 + log2(1 + gamma_out_eve2);
+        capacity_count_eve2 = capacity_count_eve2 + log2(1 + gamma_out_eve2); %  information leakage from relay to user
     end
-    %%%%%%%%%%%%%%%%% User capacity %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % ========= User capacity =================================
     capacity_user = [capacity_count_user/Num capacity_avg];
    
-    %%%%%%%%%%%%%%%%% information leakage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%5
+    % =========== information leakage ===========================
     capacity_eve1 = [capacity_eve1 capacity_count_eve1/Num];
     capacity_eve2 = [capacity_eve2 capacity_count_eve2/Num];
     capacity_eve = 0.5*(capacity_eve1 + capacity_eve2); 
+    
+    % ==== displaying user capacity, information leakages for each change in number of Eve antennas =======
     display(sprintf('Ne = %g; cap_User = %g; capacity_eve = %g;' ,N(p),capacity_user(p),capacity_eve(p)));
 end
-%%%%%%%%%   secrecy rate at the k-th user node %%%%%%%%%%%%%%%%%%%
+% =======   secrecy rate at the k-th user node ==================
 secrecy = max(real(capacity_user - capacity_eve),0); 
 
-%%%%%%%%%%% Plot figure %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ====== Plot figure ============================================
 figure
-plot(N,capacity_user, '-','color',[0 0 1],'LineWidth',2,'MarkerSize',8);
+plot(N,capacity_user, '-','color',[0 0 1],'LineWidth',2,'MarkerSize',8); 
 hold on;
 plot(N,capacity_eve, '-','color',[1 0 0],'LineWidth',2,'MarkerSize',8);%capacity_vec
 hold on;
